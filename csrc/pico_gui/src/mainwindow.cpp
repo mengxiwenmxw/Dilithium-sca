@@ -65,6 +65,10 @@ void MainWindow::Get_Sever_inst()
     int16_t PWM_Tamplate_u = 0;
     int16_t NTT_Tamplate_a,NTT_Tamplate_b,NTT_data;
 
+    int16_t idx_poly_a;
+    int poly_a[6];
+    int poly_b;
+
     QByteArray array = mSocket->readAll();
     QString    str;
 
@@ -125,6 +129,7 @@ void MainWindow::Get_Sever_inst()
         NTT_data = str.toUInt(NULL,10);
         NTT_Tamplate_a = ((NTT_data/5) - 2 + 3329 )%3329;
         NTT_Tamplate_b = (NTT_data%5 - 2 + 3329 )%3329;
+
         this->hw->pData_In->write(0x0100,NTT_Tamplate_a);
         this->hw->pData_In->write(0x0102,NTT_Tamplate_b);
         this->hw->pData_In->write(0x0002,0x0001);
@@ -139,26 +144,64 @@ void MainWindow::Get_Sever_inst()
         {
             str.append(array.at(addr)); addr ++;
         }
-        // 直接使用服务器发送的随机a值
-        // modify by mxw
-        NTT_Tamplate_a = str.toUInt(NULL,10);
-        // 使用固定的b值
-        NTT_Tamplate_b = 666;
-//        NTT_Tamplate_a = 0;
-//        NTT_Tamplate_b = 0;
-        // modify by mxw
-
-
-
+        idx_poly_a = str.toUInt(NULL,10);
         
-        this->hw->pData_In->write(0x0100,NTT_Tamplate_a);
-        this->hw->pData_In->write(0x0102,NTT_Tamplate_b);
-        //modify by mxw begin
-        //this->hw->pData_In->write(0x0100,NTT_Tamplate_b);
-        //this->hw->pData_In->write(0x0102,NTT_Tamplate_a);
-        //modify by mxw end
-        this->hw->pData_In->write(0x0002,0x0001);
-        qDebug()<< "NTT_Pipe: a=" << NTT_Tamplate_a << ", b=" << NTT_Tamplate_b << endl;
+        // ***** READ FILE GET poly_a HERE *****
+
+        #include <QFile>
+        #include <QTextStream>
+
+        QFile poly_file("Random_3000.txt"); // 假设 Random_3000.txt 与可执行文件在同一目录
+        
+        if (!poly_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qDebug() << "错误: 无法打开 Random_3000.txt";
+            return; // 退出此槽函数
+        }
+
+        QTextStream in(&poly_file);
+        QString line;
+        bool ok;
+
+        // 1. 跳转到 idx_poly_a 指定的行 (idx_poly_a is 0-based)
+        for (int i = 0; i < idx_poly_a; ++i) {
+            if (in.atEnd()) {
+                qDebug() << "错误: 索引 idx_poly_a (" << idx_poly_a << ") 超出文件范围。";
+                poly_file.close();
+                return;
+            }
+            line = in.readLine(); // 读取并丢弃这一行
+        }
+
+        // 2. 读取接下来的 6 个数到 poly_a 数组
+        for (int i = 0; i < 6; ++i) {
+            if (in.atEnd()) {
+                qDebug() << "错误: 读取 poly_a 时文件提前结束。需要 6 个数, 只读到" << i << "个。";
+                poly_file.close();
+                return;
+            }
+            line = in.readLine();
+            poly_a[i] = line.toInt(&ok); // Random_3000.txt  中的数据是整数
+            if (!ok) {
+                qDebug() << "错误: 转换第" << (idx_poly_a + i) << "行数据失败，内容:" << line;
+                poly_file.close();
+                return;
+            }
+        }
+        poly_file.close();
+
+        // ********** send values **********
+        for (int i=0; i < 6; i++){
+            this->hw->pData_In->write(0x0100+i*2,poly_a[i] & 0x0000ffff);
+            this->hw->pData_In->write(0x0101+i*2,poly_a[i] >> 16);
+            qDebug()<< "poly_a" << i << " = " << poly_a[i] << endl;
+        }
+
+        poly_b = 2773;
+        this->hw->pData_In->write(0x0100,poly_b & 0x0000ffff);
+        this->hw->pData_In->write(0x0101,poly_b >> 16);
+        this->hw->pData_In->write(0x0002,0x0001); // start FPGA
+        qDebug()<< "poly_b = " << poly_b << endl;
+        // ********** end send **********
     }
     else if(array.at(0)=='P' && array.at(1)=='W' && array.at(2)=='M' && array.at(3)=='_' &&
              array.at(4)=='P' && array.at(5)=='i' && array.at(6)=='p' && array.at(7)=='e')

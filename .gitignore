@@ -14,10 +14,12 @@ scripts/env_setting/env
 csrc/**
 # save dirs
 !csrc/**/
+# white list
 !csrc/**/*.c
 !csrc/**/*.h
 !csrc/**/*.cpp
 *.txt
+stack.info.*
 
 ######################
 #     TOOL CACHE     #

@@ -1,6 +1,6 @@
 # ************************** Project Information *************************** #
 # Project     : Dilithium                  			                         #
-# Author      : Yiming Chen                                                  #
+# Author      : Yiming Chen, Meng Xiwen                                      #
 # Date        : 2025-06-07                                                   #
 # Toolchain   : Verilator + C++ Testbench + GTKWave; VCS + Verdi             #
 # ************************************************************************** #
@@ -8,7 +8,7 @@
 ########################
 #      Module Name     #
 ########################
-MODULE := POLY_MAU
+MODULE := lbus_if
 # SUBMODULES := round table
 
 #########################
@@ -40,6 +40,7 @@ TB_SRCS_V := $(wildcard $(TB_DIR)/tb_$(MODULE).v)
 VCS_FLAGS := 	-full64 \
 				-sverilog \
 				-debug_access+all \
+				+fsdb+memory \
 
 INCLUDE_FLAGS := +incdir+$(RTL_DIR)
 
@@ -57,7 +58,7 @@ vcs_sim: vcs_compile
 
 .PHONY:verdi
 verdi: vcs_sim
-	verdi -sv -ssf $(WAVE_DIR)/wave.fsdb
+	verdi -sv -ssf $(WAVE_DIR)/tb_$(MODULE).fsdb
 
 # ===== detect the problems without compiling ===== #
 .PHONY:lint

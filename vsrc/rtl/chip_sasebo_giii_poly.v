@@ -87,10 +87,13 @@ module CHIP_SASEBO_GIII_POLY
 
    assign osc_en_b = 1'b0;
    //------------------------------------------------
-   always @(posedge clk) if (lbus_wrn)  lbus_a  <= lbus_di_a;  //1 写地�??????
-   always @(posedge clk) if (~lbus_wrn) lbus_di <= lbus_di_a;  //0 写数�??????
+   always @(posedge clk) if (lbus_wrn)  lbus_a  <= lbus_di_a;  //1 写地址
+   always @(posedge clk) if (~lbus_wrn) lbus_di <= lbus_di_a;  //0 写数据
 
-   (* keep = "TRUE" *)wire[11:0] a,b;
+   //(* keep = "TRUE" *)wire[11:0] a,b;
+   (* keep = "TRUE" *) wire[23:0]a;
+   (* keep = "TRUE" *) wire[23:0]b;
+  
 
    LBUS_IF lbus_if
      (.lbus_a(lbus_a), .lbus_di(lbus_di), .lbus_do(lbus_do),
@@ -101,6 +104,7 @@ module CHIP_SASEBO_GIII_POLY
       .blk_kvld(blk_kvld), .blk_dvld(blk_dvld),
       .blk_en(blk_en), .blk_rstn(blk_rstn),
       .clk(clk), .rst(rst));
+   
 
    //------------------------------------------------
    assign gpio_startn = ~blk_drdy;
@@ -108,48 +112,60 @@ module CHIP_SASEBO_GIII_POLY
    assign gpio_exec   = 1'b0; //blk_busy;
 
    always @(posedge clk) blk_drdy_delay <= blk_drdy;
-
-   // AES_Composite_enc AES_Composite_enc
-   //   (.Kin(blk_kin), .Din(blk_din), .Dout(blk_dout),
-   //    .Krdy(blk_krdy), .Drdy(blk_drdy_delay), .Kvld(blk_kvld), .Dvld(blk_dvld),
-   //    /*.EncDec(blk_encdec),*/ .EN(blk_en), .BSY(blk_busy),
-   //    .CLK(clk), .RSTn(blk_rstn));
    wire rst_n = ~rst;
-//   (*KEEP_HIERARCHY = "{TRUE}" *) Haraka_Core u_Haraka_Core(
-//       .clk              ( clk              ),
-//       .rst_n            ( rst_n            ),
-//       .Wots_Tree_index  ( Wots_Tree_index  ),
-//       .Wots_Tree_height ( Wots_Tree_height ),
-//       .Wots_KeyPair     ( Wots_KeyPair     ),
-//       .Sel_Tree         ( Sel_Tree         ),
-//       .Wots_Layer_Addr  ( Wots_Layer_Addr  ),
-//       .Wots_Mode        ( Wots_Mode        ),
-//       .Wots_Start       ( ~gpio_startn     )
-//    );
 
+   //------------------------------------------------   
+   MK_CLKRST mk_clkrst (.clkin(lbus_clkn), .rstnin(lbus_rstn),
+                        .clk(clk), .rst(rst));
 
-//(* dont_touch = "true" *)(* keep = "TRUE" *) wire [11:0] product_reg;
+// ******************** User add code ********************
+// generate working_flag
 
+   `define WORKING_CYCLE_NUM 3'd6
+   
+   (* keep = "TRUE" *) reg working_flag;
+   (* keep = "TRUE" *) reg [2:0]working_cycle_cnt;
+   (* keep = "TRUE" *) wire start;
 
-    genvar i;
+   assign start = ~gpio_startn;
+   
+   always @(posedge clk or negedge rst_n) begin
+      if (~rst_n) begin
+         working_flag <= 1'b0;
+         working_cycle_cnt <= 3'd0;
+
+      end else begin
+
+         if(start)begin
+            working_flag <= 1'b1;
+         end
+
+         if(working_flag&(working_cycle_cnt<`WORKING_CYCLE_NUM-1'b1)) begin
+            working_cycle_cnt <= working_cycle_cnt + 1'b1;
+         end else if(working_flag &(working_cycle_cnt>=`WORKING_CYCLE_NUM-1'b1)) begin
+            working_flag <= 1'b0;
+            working_cycle_cnt <= 3'd0;
+         end
+      end
+   end
+
+   genvar i;
    generate
-      for(i= 0; i<100; i=i+1) begin
-      (* dont_touch = "true" *)(* keep = "TRUE" *) a_b_mul a_b_mul_inst(
+      for(i= 0; i<1; i=i+1) begin
+      (* dont_touch = "true" *)(* keep = "TRUE" *) TOP_MAU u_MAU(
          .clk   ( clk   ),
          .rst_n ( rst_n ),
          .a(a),
          .b(b),
-         .start  ( ~gpio_startn )
+         .enable  (working_flag)
       );
       end
    endgenerate
  
 
-
-   //------------------------------------------------   
-   MK_CLKRST mk_clkrst (.clkin(lbus_clkn), .rstnin(lbus_rstn),
-                        .clk(clk), .rst(rst));
-endmodule // CHIP_SASEBO_GIII_AES
+// ******************** User add code finish ********************
+   
+endmodule 
 
 
    
@@ -166,7 +182,7 @@ module MK_CLKRST (clkin, rstnin, clk, rst);
 //   wire   clk_dcm, locked;
 
    //------------------------------------------------ clock
-   IBUFG u10 (.I(clkin), .O(refclk)); 
+   //IBUFG u10 (.I(clkin), .O(refclk)); 
 
 /*
    DCM_BASE u11 (.CLKIN(refclk), .CLKFB(clk), .RST(~rstnin),
@@ -177,7 +193,9 @@ module MK_CLKRST (clkin, rstnin, clk, rst);
    BUFG  u12 (.I(clk_dcm),   .O(clk));
 */
 
-   BUFG  u12 (.I(refclk),   .O(clk));
+   //BUFG  u12 (.I(refclk),   .O(clk));
+   // changed
+   assign clk = ~clkin;
 
    //------------------------------------------------ reset
    MK_RST u20 (.locked(rstnin), .clk(clk), .rst(rst));
@@ -194,6 +212,7 @@ module MK_RST (locked, clk, rst);
    output rst;
 
    //------------------------------------------------
+   // delay for fpga
    reg [15:0] cnt;
    
    //------------------------------------------------
@@ -201,5 +220,7 @@ module MK_RST (locked, clk, rst);
      if (~locked)    cnt <= 16'h0;
      else if (~&cnt) cnt <= cnt + 16'h1;
 
-   assign rst = ~&cnt;
+   // changed in 251102-mxw
+   //assign rst = ~&cnt;
+   assign rst = ~locked;
 endmodule // MK_RST
