@@ -8,7 +8,7 @@ dependencies:
   - blas=2.131=openblas
   - blas-devel=3.9.0=31_h1ea3ea9_openblas
   - brotli-python=1.0.9=py39h6a678d5_9
-  - ca-certificates=2025.2.25=h06a4308_0
+  - ca-certificates=2025.9.9=h06a4308_0
   - cached-property=2.0.1=py39h06a4308_0
   - contourpy=1.2.1=py39hdb19cb5_1
   - cycler=0.11.0=pyhd3eb1b0_0
@@ -82,6 +82,7 @@ dependencies:
   - python=3.9.0=hdb3f193_2
   - python-dateutil=2.9.0post0=py39h06a4308_2
   - python_abi=3.9=2_cp39
+  - pywavelets=1.5.0=py39ha9d4c09_0
   - qt-main=5.15.2=h110a718_10
   - readline=8.2=h5eee18b_0
   - scipy=1.13.1=py39heeff2f4_1
