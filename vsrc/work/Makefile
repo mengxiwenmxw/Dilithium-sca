@@ -8,7 +8,8 @@
 ########################
 #      Module Name     #
 ########################
-MODULE := lbus_if
+MODULE := chip_sasebo_giii_poly
+# MODULE := lbus_if
 # SUBMODULES := round table
 
 #########################

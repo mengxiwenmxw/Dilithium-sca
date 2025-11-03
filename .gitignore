@@ -6,6 +6,7 @@ vsrc/work/bin
 vsrc/work/logs
 vsrc/work/waves
 scripts/env_setting/env
+scripts/env_setting/envs
 
 #####################
 #     FILE TYPE     #

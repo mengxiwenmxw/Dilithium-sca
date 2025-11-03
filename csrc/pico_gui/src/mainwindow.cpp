@@ -151,43 +151,56 @@ void MainWindow::Get_Sever_inst()
         #include <QFile>
         #include <QTextStream>
 
-        QFile poly_file("Random_3000.txt"); // 假设 Random_3000.txt 与可执行文件在同一目录
+        QFile *poly_file = new QFile("Random_3000.txt"); // 假设 Random_3000.txt 与可执行文件在同一目录
         
-        if (!poly_file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        if (!poly_file->open(QIODevice::ReadOnly | QIODevice::Text)) {
             qDebug() << "错误: 无法打开 Random_3000.txt";
+            delete poly_file;
             return; // 退出此槽函数
         }
 
-        QTextStream in(&poly_file);
-        QString line;
+        QTextStream *in = new QTextStream(poly_file);
+        QString *line = new QString();
         bool ok;
 
         // 1. 跳转到 idx_poly_a 指定的行 (idx_poly_a is 0-based)
         for (int i = 0; i < idx_poly_a; ++i) {
-            if (in.atEnd()) {
+            if (in->atEnd()) {
                 qDebug() << "错误: 索引 idx_poly_a (" << idx_poly_a << ") 超出文件范围。";
-                poly_file.close();
+                poly_file->close();
+                delete line;      
+                delete in;        
+                delete poly_file; 
                 return;
             }
-            line = in.readLine(); // 读取并丢弃这一行
+            *line = in->readLine(); // 读取并丢弃这一行
         }
 
         // 2. 读取接下来的 6 个数到 poly_a 数组
         for (int i = 0; i < 6; ++i) {
-            if (in.atEnd()) {
+            if (in->atEnd()) {
                 qDebug() << "错误: 读取 poly_a 时文件提前结束。需要 6 个数, 只读到" << i << "个。";
-                poly_file.close();
+                poly_file->close();
+                delete line;
+                delete in;
+                delete poly_file;
                 return;
             }
-            line = in.readLine();
-            poly_a[i] = line.toInt(&ok); // Random_3000.txt  中的数据是整数
+            *line = in->readLine();
+            poly_a[i] = line->toInt(&ok); // Random_3000.txt  中的数据是整数
             if (!ok) {
                 qDebug() << "错误: 转换第" << (idx_poly_a + i) << "行数据失败，内容:" << line;
-                poly_file.close();
+                poly_file->close();
+                delete line;
+                delete in;
+                delete poly_file;
                 return;
             }
         }
-        poly_file.close();
+        poly_file->close();
+        delete line;
+        delete in;
+        delete poly_file;
 
         // ********** send values **********
         for (int i=0; i < 6; i++){

@@ -1,5 +1,6 @@
-name: /15T/Projects/Dilithium-SCA/scripts/env_setting/env
+name: dilithium-sca
 channels:
+  - nvidia
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
@@ -104,4 +105,7 @@ dependencies:
   - zipp=3.21.0=py39h06a4308_0
   - zlib=1.2.13=h5eee18b_1
   - zstd=1.5.6=hc292b87_0
-prefix: /15T/Projects/Dilithium-SCA/scripts/env_setting/env
+  - pip:
+    - cupy-cuda12x==13.6.0
+    - fastrlock==0.8.3
+prefix: /15T/Projects/Dilithium-SCA/scripts/env_setting/envs/dilithium-sca
