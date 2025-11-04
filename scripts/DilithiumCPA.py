@@ -18,6 +18,8 @@ process_num = 32
 low_sam = 0
 high_sam = 5000
 
+special_b = 2773
+
 ### instance
 cpa = CPA(
     power_trace_file=trace_file,
@@ -35,24 +37,30 @@ draw = Draw(
     sample_number=sample_num
 )
 
+
+
+
+
 if __name__ == "__main__":
     
     cpa.read_power()
     result = cpa.analyze()
     
+    top_5_keys = draw.get_top_key(result=result)
+
     draw.draw_result(
         result=result,
-        highlight_keys=[2773]
+        highlight_keys=[special_b]
     )
-    top_5_keys = [0,1,2,3,4]
+    
     draw.draw_fig1(
         result=result,
         keys_to_plot_np=top_5_keys,
-        special_b=2773,
+        special_b=special_b,
     )
     draw.draw_fig2(
         result=result,
         keys_to_plot_np=top_5_keys,
-        special_b=2773,
+        special_b=special_b,
     )
     

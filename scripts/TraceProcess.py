@@ -1,105 +1,284 @@
 from re import T
+from typing import Tuple
 import numpy as np
-from multiprocessing import Pool
+from numpy.lib.function_base import average
 from tqdm import tqdm as tq
-import multiprocessing as mp
 import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
 import os 
+from scipy.signal import correlate
+import pywt
+
+
+class MkDir:
+    def __init__(self,data_root,key_number,power_file_number,file_name='mau_traces_loop') -> None:
+        self.data_root = data_root
+        self.key_number = key_number
+        self.key_root_path = os.path.join(self.data_root , str(self.key_number) +'/')
+        self.power_file_number = power_file_number
+        self.file_name = file_name
+
+    def mk_dir(self):
+        print(f">>> Start to mk dir for key {self.key_number} in {self.data_root}:\n\
+            -{self.key_number}\n\
+                |--power_traces\n\
+                |--averaged\n\
+                    |--none\n\
+                    |--align\n\
+                    |--denoise\n\
+                    |--align-denoise\n\
+            ")
+        power_traces_path = os.path.join(self.key_root_path , 'power_traces/')
+        os.makedirs(power_traces_path,exist_ok=True)
+        for sub_dir in ['none/','align/','denoise/','align-denoise/']:
+            averaged_path = os.path.join(self.key_root_path , 'averaged/' , sub_dir )
+            os.makedirs(averaged_path,exist_ok=True)
+        print(f">>> Create Dirs finish , pls cp power traces files to  {self.key_root_path}/power_traces/")
+    
+
+    def get_power_traces_files(self):
+        power_files = []
+        for i in range(self.power_file_number):
+            now_file = os.path.join(self.key_root_path,'power_traces/',self.file_name + str(i) + '.txt')
+            if os.path.isfile(now_file):
+                power_files.append(now_file)
+            else:
+                raise ValueError(f"path:{now_file} is not a file")
+
+        return power_files
 
 class TraceProcess:
-    def __init__(self,power_trace_file=None, sample_number=5000, plaintext_number=3329,base=False):
-        self.power_trace_file = power_trace_file
+    def __init__(self, sample_number=5000, plaintext_number=3329,
+                save_root = None,
+                save_file_name = None,
+                align_feature_window : Tuple[int,int]=(None,None),
+                align_max_shift: int = None,
+                wavelet: str = 'db4',
+                wt_level: int = 8,
+                wt_mode : str = 'soft',
+                down_mode: str = 'mean',
+                down_num: int = 20
+                ):
+        if save_root is None or save_file_name is None:
+            raise ValueError("ERROR: Need save root path and file name.")
+       
+
+        self.power_trace_files = None
+        self.save_root= save_root
+        self.save_name = save_file_name
+        self.power_file_num = 0
         self.sample_number = sample_number
         self.plaintext_number = plaintext_number
+        self.power_trace_mats = {}
 
+        if align_feature_window[0] is None or align_feature_window[1] is None or align_max_shift is None:
+            raise ValueError("ERROR: pls set align window and align max shift.")
+        else :
+            self.feature_window_start,self.feature_window_end = align_feature_window[0],align_feature_window[1]
+            self.max_shift = align_max_shift
+        self.wavelet = wavelet
+        self.level = wt_level
+        self.mode  = wt_mode
+        if self.down_mode in ['max','min','mean']:
+            self.down_mode = down_mode
+            self.down_num = down_num
 
-        self.plaintext_list = []
-        self.power_trace_mat = None
-        self.base = base
-
-    def read_power(self):
-        """读取功耗轨迹数据 base"""
-        self.power_trace_mat = np.zeros((self.plaintext_number, self.sample_number))
-        if not self.base:
-             raise ValueError( 'Not base mode')
-        with tq(total=self.plaintext_number, desc="📊 Reading Power traces") as read_bar:
-            with open(self.power_trace_file, 'r') as pf:
-                number = 0
-                for line in pf:
-                    if number >= self.plaintext_number or not line.strip():
-                        break
-                    try:
-                        plaintext_str, power_trace_str = line.split(':', 1)
-                        plaintext = int(plaintext_str)
-                        power_trace = np.array(power_trace_str.strip().split()).astype(np.int64)
-
-                        if len(power_trace) < self.sample_number:
-                            power_trace = np.pad(power_trace, (0, self.sample_number - len(power_trace)))
-                        elif len(power_trace) > self.sample_number:
-                            power_trace = power_trace[:self.sample_number]
-
-                        #self.power_trace_mat[number, :] = power_trace
-                        self.power_trace_mat[plaintext, :] = power_trace
-                        self.plaintext_list.append(plaintext)
-                        number += 1
-                        read_bar.update(1)
-                    except Exception as e:
-                        print(f"Error parsing line: {line.strip()} - {str(e)}")
-
-        # 确保数组大小正确
-        if number < self.plaintext_number:
-            self.power_trace_mat = self.power_trace_mat[:number, :]
-            self.plaintext_number = number
-
-        print(f"Successfully read {len(self.plaintext_list)} power traces")
-
-    def average_base(self,output_file=None):
-        mean_power = np.mean(self.power_trace_mat,axis=0)
-        x = np.arange(self.sample_number)
-        if output_file is not None:
-            with open(output_file,'w') as bf:
-                bf.write('0'+':'+str(mean_power.tolist())[1:-1].replace(',',' '))
-        plt.plot(x,mean_power)
-        plt.show()
-
-    def save_average_power_trace(self,output_file=None):
-        if self.base:
-            raise ValueError('now mode: base')
-        if output_file is None:
-            raise ValueError('Need a output file')
-        power_traces_dict = {}
-        power_trace_file_number = 0
-        for power_file in self.power_trace_file:
-            with tq(total=self.plaintext_number, desc=f"Reading Power file:{power_file}") as read_bar:
-                with open(power_file,'r') as pf:
-                    for line in pf:
-                        plaintext_str , value_str = line.split(':',1)
-                        power_trace = np.array(value_str.strip().split()).astype(np.int64)
-                        if power_trace_file_number == 0:
-                            power_traces_dict[plaintext_str] = power_trace
-                        else :
-                            power_traces_dict[plaintext_str] += power_trace
-                        read_bar.update(1)
-            power_trace_file_number +=1
+        else:
+            raise ValueError("ERROR: parameter down mode must one of 'max','mean','min'")
         
-        with tq(total=self.plaintext_number, desc=f"Writing Power file:{output_file}") as read_bar:
-            with open(output_file,'w') as wf:
-                for plaintext_str , sum_power_trace in power_traces_dict.items():
-                    average_trace = sum_power_trace/power_trace_file_number
-                    wf.write(plaintext_str+':'+str(average_trace.tolist()).replace(',',' ')[1:-1]+'\n')
+    def read_power(self,power_trace_files=None,):
+        """读取功耗轨迹数据 one file"""
+        if power_trace_files is None:
+            raise ValueError("ERROR: Need power traces files")
+        self.power_trace_files = power_trace_files
+        self.power_file_num = len(self.power_trace_files)
+        power_trace_mat = np.zeros((self.plaintext_number, self.sample_number))
+        for file_num in range(self.power_file_num):
+            with tq(total=self.plaintext_number, desc=f">>> Reading Power traces:{self.power_trace_files[file_num]}") as read_bar:
+                with open(self.power_trace_files[file_num], 'r') as pf:
+                    number = 0
+                    for line in pf:
+                        if number >= self.plaintext_number or not line.strip():
+                            break
+                        try:
+                            plaintext_str, power_trace_str = line.split(':', 1)
+                            plaintext = int(plaintext_str)
+                            power_trace = np.array(power_trace_str.strip().split()).astype(np.int64)
+
+                            if len(power_trace) < self.sample_number:
+                                power_trace = np.pad(power_trace, (0, self.sample_number - len(power_trace)))
+                            elif len(power_trace) > self.sample_number:
+                                power_trace = power_trace[:self.sample_number]
+
+                            #power_trace_mat[number, :] = power_trace
+                            power_trace_mat[plaintext, :] = power_trace
+                            number += 1
+                            read_bar.update(1)
+                        except Exception as e:
+                            print(f"Error parsing line: {line.strip()} - {str(e)}")
+
+            # 确保数组大小正确
+            if number < self.plaintext_number:
+                power_trace_mat = power_trace_mat[:number, :]
+                self.plaintext_number = number
+
+            print(f"Successfully read {file_num} power traces")
+            self.power_trace_mats[file_num]=power_trace_mat
+        print(f">>> Successfuly read {self.power_file_num} power files")
+
+    def align_traces(self,traces_matrix):
+        """
+        使用基于特征窗口的互相关方法对齐一组迹线。
+        该方法只对 feature_window_start 到 feature_window_end 之间的片段进行互相关，
+        以一个已知的、独特的峰值作为对齐的“锚点”。
+        
+        :param traces_matrix: 输入的功耗迹线矩阵
+        :param feature_window_start: 特征窗口的起始索引
+        :param feature_window_end: 特征窗口的结束索引
+        :param max_shift: 在特征窗口内允许的最大位移，用于增加稳定性
+        :return: 对齐后的功耗迹线矩阵
+        """
+        num_traces, num_samples = traces_matrix.shape
+        if num_traces <= 1:
+            return traces_matrix
+            
+        aligned_traces = np.zeros_like(traces_matrix)
+        
+        # 1. 创建参考特征：不再是参考整个曲线，而是参考所有曲线在特征窗口内的平均波形
+        reference_feature = np.mean(traces_matrix[:, self.feature_window_start:self.feature_window_end], axis=0)
+        
+        freqs = np.fft.fftfreq(num_samples)
+
+        for i in range(num_traces):
+            if i % 500 == 0:
+                print(f"正在对齐迹线: {i}/{num_traces-1}...")
+                
+            current_trace = traces_matrix[i]
+            
+            # 2. 从当前曲线中提取相同的特征窗口
+            current_feature = current_trace[self.feature_window_start:self.feature_window_end]
+            
+            # 3. 只对特征窗口进行互相关
+            cross_corr = correlate(current_feature, reference_feature, mode='full')
+            
+            # 4. 在互相关结果中寻找最佳位移（仍然建议在小范围内搜索以策万全）
+            center_index = len(reference_feature) - 1 # 注意：这里的center_index是基于短的feature的长度
+            
+            search_start = max(0, center_index - self.max_shift)
+            search_end = min(len(cross_corr), center_index + self.max_shift + 1)
+            
+            windowed_corr = cross_corr[search_start:search_end]
+            shift_in_window = np.argmax(windowed_corr)
+            
+            shift = (search_start + shift_in_window) - center_index
+            
+            # 5. 将计算出的位移 shift 应用于完整的功耗曲线
+            current_fft = np.fft.fft(current_trace)
+            phase_shift = np.exp(-2j * np.pi * freqs * shift)
+            corrected_fft = current_fft * phase_shift
+            
+            aligned_traces[i] = np.fft.ifft(corrected_fft).real
+            
+        return aligned_traces
+
+    def denoise_traces(self,traces_matrix):
+        """
+        使用小波变换对每条迹线进行降噪。
+        原理参考论文 4.3.3 节。
+        """
+        print("\n--- 正在执行预处理第二步: 小波降噪 ---")
+        num_traces = traces_matrix.shape[0]
+        denoised_traces = np.zeros_like(traces_matrix)
+        
+        for i in range(num_traces):
+            if i % 500 == 0:
+                print(f">>> 正在降噪迹线: {i}/{num_traces-1}...")
+            
+            trace = traces_matrix[i]
+            # 1. 小波分解
+            try:
+                coeffs = pywt.wavedec(trace, self.wavelet, level=self.level)
+            except Exception as e:
+                print(f"小波分解失败: {e}")
+                continue
+            
+            # 2. 计算阈值 (VisuShrink)
+            # 噪声标准差估计
+            sigma = np.median(np.abs(coeffs[-1])) / 0.6745
+            threshold = sigma * np.sqrt(2 * np.log(len(trace)))
+            
+            # 3. 对细节系数应用软阈值
+            new_coeffs = [coeffs[0]] # 保留近似系数
+            for c in coeffs[1:]:
+                new_coeffs.append(pywt.threshold(c, threshold, mode=self.mode))
+                
+            # 4. 重构信号
+            denoised_traces[i] = pywt.waverec(new_coeffs, self.wavelet)
+
+        print("--- 小波降噪完成 ---")
+        return denoised_traces
+
+
+    def down_sample_one_plainttext(self,traces_matrix):
+        if self.down_mode == 'mean':
+            return traces_matrix.reshape(-1,self.down_num).mean(axis=1)
+        elif self.down_mode == 'max':
+            return traces_matrix.reshape(-1,self.down_num).max(axis=1)
+        else:
+            return traces_matrix.reshape(-1,self.down_num).min(axis=1)
+        
+
+    def process_traces(self,power_trace_files=None,mode = None,down=False,down_num=None):
+        """
+        mode : string = none, align, denoise, align-denoise
+        down : bool 
+        down_num : int
+        Trace process and Save result. 
+        """
+     
+        pre_fix = 'none' if mode is None else mode
+        suffix = f'_down{down_num}.txt' if down else '.txt'
+        save_path = os.path.join(self.save_root ,pre_fix + '/')
+        save_file_name = self.save_name + suffix
+
+        ### read all:
+        self.read_power(power_trace_files=power_trace_files)
+        averaged_traces = {}
+        align_flag = True if mode == 'align' or mode == 'align-denoise' else False
+        denoise_flag = True if mode == 'denoise' or mode == 'align-denoise' else False
+        down_flag = down 
+        for plaintext in range(self.plaintext_number):
+            if plaintext > 0 and plaintext % 250 == 0:
+                print(f"正在处理 a = {plaintext}/{self.plaintext_number-1}...")
+            
+            traces_for_current_a = np.zeros((self.power_file_num, self.sample_number))
+            for file_idx in range(self.power_file_num):
+                traces_for_current_a[file_idx, :] = self.power_trace_mats[file_idx][plaintext]
+            # align
+            aligned_batch = self.align_traces(traces_for_current_a) if align_flag else traces_for_current_a 
+            # denoise
+            denoise_batch = self.denoise_traces(aligned_batch) if denoise_flag else aligned_batch
+            # average
+            average_trace_plaintext = np.mean(denoise_batch, axis=0)
+            # down
+            down_trace    = self.down_sample_one_plainttext(average_trace_plaintext) if down_flag else average_trace_plaintext
+            averaged_traces[plaintext] = down_trace
+        print(f">>> Save processed file to {save_path}")
+        
+        with tq(total=self.plaintext_number, desc=f"Writing Power file:{save_file_name}") as read_bar:
+            with open(os.path.join(save_path, save_file_name),'w') as wf:
+                for plaintext , averaged_trace in averaged_traces.items():
+                    wf.write(str(plaintext)+':'+str(averaged_trace.tolist()).replace(',',' ')[1:-1]+'\n')
                     read_bar.update(1)
         print('Processing power traces finish.')
     
     def save_average_lna_power_trace(self,output_file=None,max_value=50000,low_sample=4300,high_sample=5000):
-        if self.base:
-            raise ValueError('now mode: base')
+        
         if output_file is None:
             raise ValueError('Need a output file')
         power_traces_dict = {}
         power_trace_number_dict = {}
         file_first = True
-        for power_file in self.power_trace_file:
+        for power_file in self.power_trace_files:
             with tq(total=self.plaintext_number, desc=f"Reading Power file:{power_file}") as read_bar:
                 with open(power_file,'r') as pf:
                     for line in pf:
@@ -128,28 +307,6 @@ class TraceProcess:
                     read_bar.update(1)
         print('Processing power traces finish.')
     
-    def save_delta_power_trace(self,average_cd_file,average_without_cd_file,delta_file,sample_number=1):
-        delta_power_trace_dict = {}
-        with tq(total=self.plaintext_number, desc=f"Reading Power cd file:{average_cd_file}") as read_bar:
-            with open(average_cd_file,'r') as cdf:
-                for line in cdf:
-                    plaintext_str , value_str = line.split(':',1)
-                    power_trace = np.array(value_str.strip().split()).astype(np.float64)
-                    delta_power_trace_dict[plaintext_str] = power_trace.reshape(-1,sample_number).max(axis=1)
-                    read_bar.update(1)
-        with tq(total=self.plaintext_number, desc=f"Reading Power without cd file:{average_without_cd_file}") as read_bar:
-            with open(average_without_cd_file,'r') as wcdf:
-                for line in wcdf:
-                    plaintext_str , value_str = line.split(':',1)
-                    power_trace = np.array(value_str.strip().split()).astype(np.float64)
-                    delta_power_trace_dict[plaintext_str] -= power_trace.reshape(-1,sample_number).max(axis=1)
-                    read_bar.update(1)
-        with tq(total=self.plaintext_number, desc=f"Writing delta Power file:{delta_file}") as read_bar:
-            with open(delta_file,'w') as wdpf:
-                for plaintext_str , delta_power_trace in delta_power_trace_dict.items():
-                    wdpf.write(plaintext_str+':'+str(delta_power_trace.tolist()).replace(',',' ')[1:-1]+'\n')
-                    read_bar.update(1)
-        print('Processing delta power traces finish.')
 
     def down_sample(self,input_file,output_file,s_num=1,mode = 'mean'):
         if mode not in ['max','mean','min']:
@@ -173,25 +330,6 @@ class TraceProcess:
                     wdpf.write(plaintext_str+':'+str(power_trace.tolist()).replace(',',' ')[1:-1]+'\n')
                     read_bar.update(1)
 
-    def sub_base(self,power_file,base_file,output_file,s_sum=1):
-        with open(base_file,'r') as bf:
-            for line in bf:
-                _,base_trace_str = line.split(':',1)
-                base_trace = np.array(base_trace_str.strip().split()).astype(np.float64)
-        power_trace_dict = {}
-        with tq(total=self.plaintext_number, desc=f"Reading file:{power_file}") as read_bar:
-            with open(power_file,'r') as cdf:
-                for line in cdf:
-                    plaintext_str , value_str = line.split(':',1)
-                    power_trace = np.array(value_str.strip().split()).astype(np.float64)
-                    power_trace_dict[plaintext_str] = power_trace - base_trace
-                    read_bar.update(1)
-        with tq(total=self.plaintext_number, desc=f"Writing delta Power file:{output_file}") as read_bar:
-            with open(output_file,'w') as wdpf:
-                for plaintext_str , power_trace in power_trace_dict.items():
-                    wdpf.write(plaintext_str+':'+str(power_trace.tolist()).replace(',',' ')[1:-1]+'\n')
-                    read_bar.update(1)
-
     def show_trace(self,trace_file,trace_number=0,s_num=1):
         x = np.arange(self.sample_number//s_num)
         trace = None
@@ -208,158 +346,4 @@ class TraceProcess:
         plt.show()
 
 if __name__ == "__main__":
-    data_root = 'data/LNA7m/'
-    #modes = [0] 
-    """ 0 mkdir ; 1 save average cd ; 2 save average without cd ; 
-        3 save delta file ; 4 save aver down  sample delta file ;
-        5 save delta down sample; 6 base file process ; 7 save average LNA traces;
-        other flexiable mode""" 
-    modes = [0]
-    ###### config #####
-    b_name = 666
-    loop_cd_num= 20
-    loop_wt_cd_num= 16
-    down_sample_num = 20
-
-    sample_number = 5000
-    plaintext_number = 3329
-
-    output_average_cd_file_name = 'average_cd_loop_'+str(loop_cd_num)
-    output_average_wt_cd_file_name = 'average_wt_cd_loop_'+str(loop_wt_cd_num)
-    output_aver_delta_file_name = 'delta_aver_cd_loop_'+str(loop_cd_num)
-    output_aver_down_delta_file_name = 'aver_'+'down'+str(down_sample_num) + '_delta'
-    output_aver_delta_down_file_name = 'aver_delta_'+'down'+str(down_sample_num)
-
-    input_cd_file_name = 'ntt_pipeline_traces-loop' 
-    input_wt_cd_file_name = 'ntt_pipeline_traces-loop'
-
-    source_cd_file_path = data_root+str(b_name)+'/'+'source_cd_file/'
-    source_wt_cd_file_path = data_root+str(b_name)+'/'+'source_wt_cd_file/'
-    average_file_path = data_root+str(b_name)+'/'+'average/'
-    delta_file_path = data_root+str(b_name)+'/' + 'delta/'
-    
-    power_files_cd =[]
-    power_files_wt_cd = []
-
-    for cd_file_num in range(loop_cd_num):
-        power_files_cd.append(source_cd_file_path+input_cd_file_name+str(cd_file_num)+'.txt')
-    for wt_cd_file_num in range(loop_wt_cd_num):
-        power_files_wt_cd.append(source_wt_cd_file_path+input_wt_cd_file_name+str(wt_cd_file_num)+'.txt')
-
-    #### FULL files' name ####
-    average_cd_file = average_file_path + output_average_cd_file_name + '.txt'
-    average_wt_cd_file = average_file_path + output_average_wt_cd_file_name + '.txt'
-    delta_file = delta_file_path + output_aver_delta_file_name + '.txt'
-    aver_down_delta_file = delta_file_path + output_aver_down_delta_file_name + '.txt'
-    aver_delta_down_file = delta_file_path + output_aver_delta_down_file_name + '.txt'
-
-    for mode in modes:
-        ##### file path set #####
-        if mode == 0:
-            print('Make Dir')
-            os.makedirs(source_cd_file_path,exist_ok=True)
-            os.makedirs(source_wt_cd_file_path,exist_ok=True)
-            os.makedirs(average_file_path,exist_ok=True)
-            os.makedirs(delta_file_path,exist_ok=True)
-            print('Finish.')
-        elif mode == 1:
-            print('Save average power with cd')
-            tp_cd=TraceProcess(
-                power_trace_file=power_files_cd,
-                sample_number=sample_number,
-                plaintext_number=plaintext_number,
-            )
-            tp_cd.save_average_power_trace(output_file=average_cd_file)
-            # tp_cd.show_trace(
-            #     trace_file=average_cd_file,
-            #     s_num=1)
-        elif mode == 2:
-            print('Save average power without cd')
-            tp_wt_cd = TraceProcess(
-                power_trace_file=power_files_wt_cd,
-                sample_number=sample_number,
-                plaintext_number=plaintext_number,
-            )
-            tp_wt_cd.save_average_power_trace(output_file=average_wt_cd_file)
-            # tp_wt_cd.show_trace(
-            #     trace_file=average_wt_cd_file,
-            #     s_num=1)
-        
-        elif mode in [3,4,5]:
-            tp_delta = TraceProcess(
-                sample_number=sample_number,
-                plaintext_number=plaintext_number,
-            )
-            if mode ==3:
-                print('Save delta power file ')
-                tp_delta.save_delta_power_trace(
-                    average_cd_file=average_cd_file,
-                    average_without_cd_file=average_wt_cd_file,
-                    delta_file=delta_file,
-                    sample_number=1)
-            elif mode ==4:
-                print('Save aver down sample delta power file ')
-                tp_delta.save_delta_power_trace(
-                    average_cd_file=average_cd_file,
-                    average_without_cd_file=average_wt_cd_file,
-                    delta_file=aver_down_delta_file,
-                    sample_number=down_sample_num)
-            elif mode == 5:
-                print('Save  delta power data down sample file')
-                tp_delta.down_sample(
-                    input_file=delta_file,
-                    output_file=aver_delta_down_file,
-                    s_num=sample_number,
-                    mode= 'max')
-        elif mode == 6:
-            power_base = 'data/base/ntt_pipeline_traces_base.txt'
-            base_output= 'data/base/base_average.txt'
-            tp_base = TraceProcess(
-                power_trace_file=power_base,
-                sample_number=5000,
-                plaintext_number=3329,
-                base= True
-            )
-            tp_base.read_power()
-            tp_base.average_base(output_file=base_output)
-        elif mode == 7:
-            print('save average LNA power trace ')
-            tp_lna = TraceProcess(
-                power_trace_file=power_files_cd,
-                sample_number=sample_number,
-                plaintext_number=plaintext_number,
-            )
-            tp_lna.save_average_lna_power_trace(output_file=average_cd_file,max_value=50000,low_sample=3000)
-        else :
-            #power_file = 'data/2773/source_cd_file/ntt_pipeline_traces-loop0.txt'
-            #base_file = 'data/base/mean10_base.txt'
-            #power_file = 'data/2773/average/cd_loop0_mean10.txt'
-            #output_file = 'data/2773/average/cd_loop0_mean10.txt'
-            #output_file = 'data/2773/average/cd_loop0_mean100.txt'
-            #output_file = 'data/2773/average/cd_loop0_mean20.txt'
-            #output_file = 'data/base/mean10_base.txt'
-            #output_file = 'data/2773/delta/mean10_loop0_sub_base.txt'
-            #output_file = 'data/mod_1ntt/666/source_cd_file/ntt_pipeline_traces-loop0.txt'
-            #output_file = 'data/mod_1ntt/666/average/average_cd_loop_2.txt'
-            output_file = 'data/LNA/666/source_cd_file/ntt_pipeline_traces-loop1.txt'
-            #output_file = 'data/LNA/666/average/average_cd_loop_20_without_error.txt'
-            #output_file = 'data/LNA/666/average/average_cd_loop_20.txt'
-            s_num = 1
-            tp = TraceProcess(
-                sample_number=5000,
-                plaintext_number=3329,
-            )
-            # tp.down_sample(
-            #     input_file=power_file,
-            #     output_file= output_file,
-            #     s_num=s_num,
-            #     mode='mean'
-            # )
-            # tp.sub_base(
-            #     power_file=power_file,
-            #     base_file=base_file,
-            #     output_file=output_file,
-            #     s_sum=s_num
-            #     )
-            tp.show_trace(trace_file=output_file,s_num=s_num,trace_number=112)
-            
+    pass
