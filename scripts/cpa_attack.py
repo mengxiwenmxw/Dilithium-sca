@@ -9,35 +9,27 @@ from scipy.signal import correlate
 #      Parameters      #
 ########################
 
-# TRACES_FILENAME = './result_preprocess/1/averaged-5.txt'
-# TRACES_FILENAME = './result_preprocess/102/averaged-6.txt'
-# TRACES_FILENAME = './result_preprocess/456/averaged-5.txt'
-# TRACES_FILENAME = './result_preprocess/666/averaged-2.txt'
+
 # TRACES_FILENAME = './result_preprocess/666-lnax5/averaged-20-lnax5.txt'
-TRACES_FILENAME = './result_preprocess/666-lnax10/averaged-0to19.txt'
-# TRACES_FILENAME = './result_preprocess/666/averaged-2.txt'
-# TRACES_FILENAME = './result_preprocess/1234/averaged-4.txt'
-# TRACES_FILENAME = './result_preprocess/2619/averaged-5.txt'
-# TRACES_FILENAME = './result_preprocess/2619/traces-x10-loop0.txt'
-# TRACES_FILENAME = './result_preprocess/2773/averaged-9.txt'
-# TRACES_FILENAME = './result_preprocess/3328/averaged-16.txt'
-special_b = 666
+TRACES_FILENAME = '/15T/Projects/Dilithium-SCA/data/traces/2773/averaged/old_cym_scripts/averaged-0to19.txt'
+
+special_b = 2773
 FIG3_ENABLE = False  # 是否绘制fig3
 
 wn = 1729
-N = 3329
+N = 8380417
 B_GUESS_MIN = 0      # b_guess 的最小值 (包含)
 B_GUESS_MAX = 3328  # b_guess 的最大值 (包含)
 
-
+a_last = 0
 
 ########################
 #  Preprocessing Setup #
 ########################
 USE_DENOISING = False  # 是否启用小波降噪
 DOWNSAMPLE_FACTOR = 20 # 降采样（建议在对齐和降噪后，如果需要的话，在main函数中进行）
-ROI_START   = 4400 // DOWNSAMPLE_FACTOR
-ROI_END     = 4600 // DOWNSAMPLE_FACTOR
+ROI_START   = 3000 // DOWNSAMPLE_FACTOR
+ROI_END     = 5000 // DOWNSAMPLE_FACTOR
 
 CONFIG_WAVELET = 'db4'  # 小波类型
 CONFIG_LEVEL = 8        # 小波分解层数
@@ -144,6 +136,9 @@ def calculate_product(b):
     product = (b * wn) % N
     return product
 
+def HD(num1,num2):
+    return bin(num2^num1).count('1')
+
 #######################
 #     CALCULATION     #
 #######################
@@ -153,20 +148,34 @@ def calculate_correlation_for_guess(b_guess, traces_matrix, a_values):
     """
     num_traces = len(a_values)
     product_guess = calculate_product(b_guess)
-
+    global a_last
     ##### get model L #####
 
     ### 1 ###
     L = np.zeros(num_traces)
+    file_path = "/15T/Projects/Dilithium-SCA/data/special_files/Random_3000.txt"
     for i in range(num_traces):
 
-    ## MODEL 1 ##
-        c_bit_width  = 13
-        a_val = a_values[i]
-        c_sum = a_val + product_guess
-        c_val = c_sum - N if c_sum >= N else c_sum
-        # L[i] = c_bit_width - popcount(c_val)
-        L[i] = popcount(c_val)
+    # ## MODEL 1 ##
+    #     c_bit_width  = 13
+    #     a_val = a_values[i]
+    #     c_sum = a_val + product_guess
+    #     c_val = c_sum - N if c_sum >= N else c_sum
+    #     # L[i] = c_bit_width - popcount(c_val)
+    #     L[i] = popcount(c_val)
+
+    ## MODEL Dilithium
+        a_idx = a_values[i]
+        with open(file_path, 'r') as f:
+            all_lines = f.readlines()
+        start_index = a_idx
+        end_index = a_idx + 6
+        target_lines = all_lines[start_index:end_index]
+        numbers = [int(line.strip()) for line in target_lines]
+
+        a1, a2, a3, a4, a5, a6 = numbers
+        L[i] = HD(a1* b_guess %N, a2* b_guess %N) + HD(a1* b_guess %N, a_last* b_guess %N)
+        a_last = a6
     
     # ## MODEL 2 ##
     #     a_val = a_values[i]
@@ -542,9 +551,9 @@ if __name__ == "__main__":
         timestamp = datetime.now().strftime("%Y%m%d_%H:%M")
         tag_with_txt = TRACES_FILENAME.split("/")[3]
         tag = tag_with_txt.split(".")[0]
-        result_dir = os.path.join("result", str(special_b), timestamp+"-"+tag)
+        result_dir = os.path.join("/15T/Projects/Dilithium-SCA/result", timestamp+"-"+tag)
         os.makedirs(result_dir, exist_ok=True)
-        print(f"本次运行结果将保存在: {result_dir}")
+        # print(f"本次运行结果将保存在: {result_dir}")
         # --- Load and Run CPA --- #
         # 使用降采样功能，每10个点取平均值或最大值
         # downsample_method可以是'mean'或'max'或'min'

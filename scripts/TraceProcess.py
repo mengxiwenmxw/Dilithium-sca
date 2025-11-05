@@ -7,19 +7,20 @@ import matplotlib.pyplot as plt
 import os 
 from scipy.signal import correlate
 import pywt
-
+import math
 
 class MkDir:
-    def __init__(self,data_root,key_number,power_file_number,file_name='mau_traces_loop') -> None:
+    def __init__(self,data_root,key_number,power_file_number,file_name='mau_traces_loop',tag:str='') -> None:
         self.data_root = data_root
         self.key_number = key_number
-        self.key_root_path = os.path.join(self.data_root , str(self.key_number) +'/')
+        self.key_root_path = os.path.join(self.data_root , str(self.key_number)+tag +'/')
+        self.tag = tag
         self.power_file_number = power_file_number
         self.file_name = file_name
 
     def mk_dir(self):
-        print(f">>> Start to mk dir for key {self.key_number} in {self.data_root}:\n\
-            -{self.key_number}\n\
+        print(f">>> Start to mk dir for key {self.key_number} in {self.key_root_path}:\n\
+            -{str(self.key_number)+ self.tag}\n\
                 |--power_traces\n\
                 |--averaged\n\
                     |--none\n\
@@ -45,6 +46,95 @@ class MkDir:
                 raise ValueError(f"path:{now_file} is not a file")
 
         return power_files
+
+def visualize_preprocessing(unaligned, aligned, averaged, a_val, result_dir):
+    """生成并保存用于展示预处理效果的对比图。"""
+    print(f"--- 正在为 a = {a_val} 生成可视化图表 ---")
+    
+    # --- 图1: 对齐效果对比 ---
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10), sharex=True, sharey=True)
+    
+    # 只画前5条曲线以便观察
+    num_curves_to_show = min(5, unaligned.shape[0])
+
+    ax1.set_title(f'Before Alignment (First {num_curves_to_show} Traces)', fontsize=14)
+    for i in range(num_curves_to_show):
+        ax1.plot(unaligned[i, :], label=f'Loop {i}')
+    ax1.legend()
+    
+    ax2.set_title(f'After Alignment (First {num_curves_to_show} Traces)', fontsize=14)
+    for i in range(num_curves_to_show):
+        ax2.plot(aligned[i, :], label=f'Loop {i}')
+    
+    fig1.suptitle(f'Comparison of Alignment (a = {a_val})', fontsize=16, weight='bold')
+    plt.xlabel("Time", fontsize=12)
+    fig1.supylabel("Power", fontsize=12)
+    
+    fig1_path = os.path.join(result_dir, f'fig_alignment_a{a_val}.png')
+    plt.savefig(fig1_path)
+    print(f"[+] 对齐效果图已保存至: {fig1_path}")
+    plt.close(fig1)
+
+    # --- 图2: 平均效果 ---
+    fig2, ax = plt.subplots(figsize=(15, 8))
+    
+    # 绘制所有对齐后的曲线
+    for i in range(aligned.shape[0]):
+        ax.plot(aligned[i, :], color='grey', alpha=0.3)
+    
+    # 绘制平均后的曲线
+    ax.plot(averaged, color='red', linewidth=2, label='Averaged Trace')
+    
+    ax.set_title(f'Average Effect (a = {a_val})', fontsize=16, weight='bold')
+    ax.set_xlabel("Time", fontsize=12)
+    ax.set_ylabel("Power", fontsize=12)
+    ax.legend()
+
+    fig2_path = os.path.join(result_dir, f'fig_averaging_a{a_val}.png')
+    plt.savefig(fig2_path)
+    print(f"[+] 平均效果图已保存至: {fig2_path}")
+    plt.close(fig2)
+
+    # --- 图3: 原始曲线概览 ---
+    print(f"--- 正在为 a = {a_val} 生成图3: 单独绘制每条对齐后的曲线 ---")
+    
+    num_plots = aligned.shape[0]
+    # 定义网格布局，这里设置为每行最多5个子图
+    plots_per_row = 5
+    num_rows = math.ceil(num_plots / plots_per_row)
+
+    fig3, axes = plt.subplots(num_rows, plots_per_row, figsize=(15, 3 * num_rows), squeeze=False)
+    
+    # 将axes数组扁平化以便于索引
+    axes_flat = axes.flatten()
+
+    # 循环绘制每一条对齐后的曲线到独立的子图中
+    for i in range(num_plots):
+        ax = axes_flat[i]
+        ax.plot(aligned[i, :], color='teal')
+        ax.set_ylim(-20000, 25000)
+        ax.set_title(f'Aligned Trace from Loop {i}', fontsize=10)
+        # 为每个子图设置坐标轴标签，可以简化一些
+        ax.set_xlabel("Time", fontsize=8)
+        ax.set_ylabel("Power", fontsize=8)
+        ax.tick_params(axis='both', which='major', labelsize=8)
+
+    # 隐藏多余的、未使用的子图轴
+    for i in range(num_plots, len(axes_flat)):
+        axes_flat[i].set_visible(False)
+
+    fig3.suptitle(f'All Individual Aligned Traces (a = {a_val})', fontsize=16, weight='bold')
+    # 使用 tight_layout 自动调整子图参数，使其填充整个图像区域
+    plt.tight_layout(rect=[0, 0, 1, 0.96]) # 调整布局以防止主标题重叠
+
+    fig3_path = os.path.join(result_dir, f'fig_all_aligned_a{a_val}.png')
+    plt.savefig(fig3_path, dpi=300)
+    print(f"[+] 所有对齐曲线的独立图已保存至: {fig3_path}")
+    plt.close(fig3)
+
+GENERATE_VISUALIZATIONS = True
+A_VAL_TO_VISUALIZE = 2773
 
 class TraceProcess:
     def __init__(self, sample_number=5000, plaintext_number=3329,
@@ -74,11 +164,12 @@ class TraceProcess:
             raise ValueError("ERROR: pls set align window and align max shift.")
         else :
             self.feature_window_start,self.feature_window_end = align_feature_window[0],align_feature_window[1]
+            print(f"feature_window = {self.feature_window_start}, {self.feature_window_end}")
             self.max_shift = align_max_shift
         self.wavelet = wavelet
         self.level = wt_level
         self.mode  = wt_mode
-        if self.down_mode in ['max','min','mean']:
+        if down_mode in ['max','min','mean']:
             self.down_mode = down_mode
             self.down_num = down_num
 
@@ -86,13 +177,14 @@ class TraceProcess:
             raise ValueError("ERROR: parameter down mode must one of 'max','mean','min'")
         
     def read_power(self,power_trace_files=None,):
-        """读取功耗轨迹数据 one file"""
+        """读取功耗轨迹数据"""
         if power_trace_files is None:
             raise ValueError("ERROR: Need power traces files")
         self.power_trace_files = power_trace_files
-        self.power_file_num = len(self.power_trace_files)
-        power_trace_mat = np.zeros((self.plaintext_number, self.sample_number))
+        self.power_file_num = len(power_trace_files)
+        
         for file_num in range(self.power_file_num):
+            power_trace_mat = np.zeros((self.plaintext_number, self.sample_number))
             with tq(total=self.plaintext_number, desc=f">>> Reading Power traces:{self.power_trace_files[file_num]}") as read_bar:
                 with open(self.power_trace_files[file_num], 'r') as pf:
                     number = 0
@@ -121,7 +213,7 @@ class TraceProcess:
                 power_trace_mat = power_trace_mat[:number, :]
                 self.plaintext_number = number
 
-            print(f"Successfully read {file_num} power traces")
+            print(f"Successfully read {file_num+1} power traces")
             self.power_trace_mats[file_num]=power_trace_mat
         print(f">>> Successfuly read {self.power_file_num} power files")
 
@@ -236,7 +328,7 @@ class TraceProcess:
         """
      
         pre_fix = 'none' if mode is None else mode
-        suffix = f'_down{down_num}.txt' if down else '.txt'
+        suffix = f'{len(power_trace_files)}_down{down_num}.txt' if down else f'{len(power_trace_files)}.txt'
         save_path = os.path.join(self.save_root ,pre_fix + '/')
         save_file_name = self.save_name + suffix
 
@@ -244,7 +336,9 @@ class TraceProcess:
         self.read_power(power_trace_files=power_trace_files)
         averaged_traces = {}
         align_flag = True if mode == 'align' or mode == 'align-denoise' else False
+        
         denoise_flag = True if mode == 'denoise' or mode == 'align-denoise' else False
+        
         down_flag = down 
         for plaintext in range(self.plaintext_number):
             if plaintext > 0 and plaintext % 250 == 0:
@@ -252,7 +346,8 @@ class TraceProcess:
             
             traces_for_current_a = np.zeros((self.power_file_num, self.sample_number))
             for file_idx in range(self.power_file_num):
-                traces_for_current_a[file_idx, :] = self.power_trace_mats[file_idx][plaintext]
+                traces_for_current_a[file_idx, :] = self.power_trace_mats[file_idx][plaintext,:]
+                
             # align
             aligned_batch = self.align_traces(traces_for_current_a) if align_flag else traces_for_current_a 
             # denoise
@@ -262,12 +357,15 @@ class TraceProcess:
             # down
             down_trace    = self.down_sample_one_plainttext(average_trace_plaintext) if down_flag else average_trace_plaintext
             averaged_traces[plaintext] = down_trace
+            # --- 如果是指定的a值，则生成可视化图表 ---
+            if GENERATE_VISUALIZATIONS and plaintext == A_VAL_TO_VISUALIZE:
+                visualize_preprocessing(traces_for_current_a, aligned_batch, down_trace, plaintext, save_path)
         print(f">>> Save processed file to {save_path}")
         
         with tq(total=self.plaintext_number, desc=f"Writing Power file:{save_file_name}") as read_bar:
             with open(os.path.join(save_path, save_file_name),'w') as wf:
                 for plaintext , averaged_trace in averaged_traces.items():
-                    wf.write(str(plaintext)+':'+str(averaged_trace.tolist()).replace(',',' ')[1:-1]+'\n')
+                    wf.write(str(plaintext)+':'+str(averaged_trace.tolist()).replace(' ','').replace(',',' ')[1:-1]+'\n')
                     read_bar.update(1)
         print('Processing power traces finish.')
     

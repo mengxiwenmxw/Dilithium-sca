@@ -28,12 +28,18 @@ import cupy as cp
 
 # # 加速比
 # print(f"\n加速比: NumPy / CuPy = {numpy_time / cupy_time:.1f}x")
-print(f">>> Start to mk dir for key {0} in {0}:\n\
-              -{0}\n\
-                |--power_traces\n\
-                |--averaged\n\
-                    |--none\n\
-                    |--align\n\
-                    |--denoise\n\
-                    |--align-denoise\n\
-            ")
+RANDOM_FILE = "/15T/Projects/Dilithium-SCA/data/special_files/Random_3000.txt"
+
+import linecache
+
+def get_plaintexts(file_path,trace_number,plaintext_num=6):
+    plaintexts = []
+    for i in range(plaintext_num):
+        line = linecache.getline(file_path, trace_number+i+1).rstrip('\n')#从1开始
+        if not line:
+            raise ValueError("Plaintexts file line num not enough")
+        plaintexts.append(int(line)) 
+    return plaintexts  
+
+for i in range(5):
+  print(get_plaintexts(RANDOM_FILE,i))

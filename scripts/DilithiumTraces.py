@@ -1,3 +1,4 @@
+from re import T
 from TraceProcess import TraceProcess ,MkDir
 
 """
@@ -6,19 +7,20 @@ from TraceProcess import TraceProcess ,MkDir
 """
 
 DATA_ROOT = "/15T/Projects/Dilithium-SCA/data/traces/"
-SOURCE_FILE_PREFIX_NAME = 'mau_traces_loop'
+SOURCE_FILE_PREFIX_NAME = 'mau_traces-loop'
 
 KEY_NUM = 2773
-FILE_NUM =2
+FILE_NUM =20
+DIR_TAG = '_kyber'
 
 SAMPLE_NUM = 5000
 PLAINTEXT_NUM = 2994
 
-PROCESS_MODE = None # process mode: none (None) , align ('align'), denoise ('denoise'), align-denoise ('align-denoise')
+PROCESS_MODE = 'align' # process mode: none (None) , align ('align'), denoise ('denoise'), align-denoise ('align-denoise')
 DOWN = False # bool 
 DOWN_NUM = 20 
-SAVE_ROOT = DATA_ROOT +f'{KEY_NUM}/averaged/'
-SAVE_FILE_NAME = "averaged_mau"
+SAVE_ROOT = DATA_ROOT +f'{KEY_NUM}{DIR_TAG}/averaged/'
+SAVE_FILE_NAME = "averaged_mau_loop"
 
 ALIGN_WINDOW = (330,340)
 ALIGN_MAX_SHIFT = 7
@@ -28,7 +30,8 @@ dir_set = MkDir(
     data_root=DATA_ROOT,
     key_number=KEY_NUM,
     power_file_number=FILE_NUM,
-    file_name=SOURCE_FILE_PREFIX_NAME
+    file_name=SOURCE_FILE_PREFIX_NAME,
+    tag=DIR_TAG
 )
 
 traces_process = TraceProcess(
@@ -44,8 +47,8 @@ if __name__ == "__main__":
     ### two modes:
     ## mkdir ; process
     ###
-    mode = 'mkdir'
-    # mode = 'process'
+    #mode = 'mkdir'
+    mode = 'process'
     if mode == 'mkdir':
         dir_set.mk_dir()
     elif mode == 'process':
@@ -57,4 +60,4 @@ if __name__ == "__main__":
             down_num=DOWN_NUM
             )
 
-    print(power_files)
+    #print(power_files)

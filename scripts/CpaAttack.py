@@ -5,10 +5,13 @@ from multiprocessing import Pool,shared_memory
 from numpy.core.multiarray import ravel_multi_index
 from tqdm import tqdm as tq
 import multiprocessing as mp
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 import json
 import linecache
+
+matplotlib.use('Agg')
 
 high_contrast_colors = [   
             '#FFD700',  # 金黄色
@@ -29,7 +32,7 @@ def column_pearson_corr(matrix1, matrix2):
     """
     计算两个矩阵的列间 Pearson 相关系数
     参数:
-    matrix1, matrix2 -- 相同形状的二维 numpy 数组 (m×n)
+    matrix1, matrix2 -- 相同形状的二维 numpy 数组 (mxn)
     返回:
     相关系数矩阵 -- 形状为 (1, n) 的 numpy 数组
     """
@@ -61,21 +64,34 @@ def column_pearson_corr(matrix1, matrix2):
 a_last = 0
 qNUM = 8380417
 
+########################################
+#     Get Prediction Vector Method     #
+########################################
 def distance(plaintexts,key):
     global a_last
     p0 = 0
     for i in range(4):
         if i :
-            p0 += hw((plaintexts[4-i]*key)&0x1ff_ffff,(plaintexts[5-i]*key)&0x1ff_ffff)
+            p0 += HD((plaintexts[4-i]*key),(plaintexts[5-i]*key))
         else :
-            p0 += hw(plaintexts[4-i]*key,plaintexts[5-i]*key)
+            p0 += HD(plaintexts[4-i]*key,plaintexts[5-i]*key)
 
-    mm_result = hw(plaintexts[0]*key%qNUM,plaintexts[1]*key%qNUM)
-    output = hw(a_last*key%qNUM,plaintexts[1]*key%qNUM)
+    mm_result = HD(plaintexts[0]*key%qNUM,plaintexts[1]*key%qNUM)
+    output = HD(a_last*key%qNUM,plaintexts[0]*key%qNUM)
     a_last = plaintexts[5]
-    return p0 + mm_result + output
+    return output 
 
-def hw(num1,num2):
+    # ##### Verify #####
+    # wn = 1729
+    # N = 3329
+    # a_val = plaintexts[0]
+    # product_guess = (key * wn) % N
+    # c_sum = a_val + product_guess
+    # c_val = c_sum - N if c_sum >= N else c_sum
+    # return HD(c_val, 0)
+
+
+def HD(num1,num2):
     return bin(num2^num1).count('1')
 
 
@@ -102,18 +118,20 @@ def process_key(key, power_trace_mat, plaintext_list):
 def get_plaintexts(file_path,trace_number,plaintext_num=6):
     plaintexts = []
     for i in range(plaintext_num):
-        line = linecache.getline(file_path, trace_number+i+1).rstrip('\n')#从1开始
-        if not line:
-            raise ValueError("Plaintexts file line num not enough")
+        line = linecache.getline(file_path, trace_number+i+1).rstrip('\n') #从1开始(HERE)
+        if not line or line.isspace():
+            raise ValueError(f"Plaintexts file line num not enough or cant find file {file_path}")
         plaintexts.append(int(line)) 
     return plaintexts  
 
-
+DOWNSAMPLE_FACTOR = 20      # 降采样参数
 class CPA:
-    def __init__(self, power_trace_file, random_plaintext_file,sample_number=5000, traces_number=3329, key_number=3329,
+    def __init__(self, power_trace_file, random_plaintext_file,
+                 sample_number=5000, traces_number=3329, key_number=3329,
                  process_number=None,
                  low_sample = None,
-                 high_sample = None):
+                 high_sample = None,
+                 ):
 
         self.power_trace_file = power_trace_file
         self.random_plaintext_file = random_plaintext_file
@@ -140,32 +158,44 @@ class CPA:
     def read_power(self):
         """读取功耗轨迹数据"""
         self.power_trace_mat = np.zeros((self.traces_number, self.sample_number))
-        with tq(total=self.traces_number, desc="📊 Reading Power traces") as read_bar:
+        # 进度条
+        with tq(total=self.traces_number, desc=">>>>> 01 Reading Power traces") as read_bar:
             with open(self.power_trace_file, 'r') as pf:
                 number = 0
+                # Read traces into matrix
                 for line in pf:
                     if number >= self.traces_number or not line.strip():
                         break
-                    try:
+                    else:
                         plaintext_str, power_trace_str = line.split(':', 1)
                         plaintext_number = int(plaintext_str)
                         power_trace = np.array(power_trace_str.strip().split()).astype(np.float64)
+                        # >>> Slice >>>
                         power_trace = power_trace[self.low_sample:self.high_sample]
+                        # >>> Save to matrix >>>
                         self.power_trace_mat[plaintext_number, :] = power_trace
                         self.plaintext_list.append(get_plaintexts(self.random_plaintext_file,plaintext_number))
                         number += 1
                         read_bar.update(1)
-                    except Exception as e:
-                        print(f"Error parsing line: {line.strip()} - {str(e)}")
+                    
+                
         # 确保数组大小正确
         if number < self.traces_number:
             self.power_trace_mat = self.power_trace_mat[:number, :]
             self.traces_number = number
-        print(f"Successfully read {len(self.plaintext_list)} power traces")
+        print(f"INFO: 1. Successfully read {len(self.plaintext_list)} power traces")
+        print(f"INFO: 2. Power traces matrix size: ({self.power_trace_mat.shape[0]} x {self.power_trace_mat.shape[1]})")
+        ##### DownSample #####
+        if DOWNSAMPLE_FACTOR > 1:
+            print(f"\tINFO: Down Sampling activated, processing...")
+            sample_downsize = self.power_trace_mat.shape[1] // DOWNSAMPLE_FACTOR
+            self.power_trace_mat = self.power_trace_mat[:, :sample_downsize * DOWNSAMPLE_FACTOR].reshape(self.power_trace_mat.shape[0], sample_downsize, DOWNSAMPLE_FACTOR).max(axis=2)
+            self.sample_number = sample_downsize
+            print(f"\tINFO: Resize into ({self.power_trace_mat.shape[0]} x {sample_downsize})")
 
     def analyze(self,output_file=None):
         """并行分析所有密钥"""
-        print(f"🚀 Starting parallel CPA analysis with {self.process_number} processes...")
+        print(f">>>>> 02 Starting parallel CPA analysis with {self.process_number} processes...")
         # 准备任务参数
         tasks = [(key, self.power_trace_mat, self.plaintext_list)
                  for key in range(self.key_number)]
@@ -173,7 +203,7 @@ class CPA:
         # 使用进程池并行处理
         with Pool(processes=self.process_number) as pool:
             # 使用imap_unordered获取结果（无序但更快）
-            with tq(total=self.key_number, desc="🔑 Analyzing keys") as pbar:
+            with tq(total=self.key_number, desc="    Analyzing keys") as pbar:
                 for key, corr in pool.imap_unordered(process_key_wrapper, tasks, chunksize=10):
                     self.result[key] = corr
                     pbar.update(1)
@@ -185,7 +215,7 @@ class CPA:
             with open(output_file,'w') as of:
                 json.dump(self.result, of, ensure_ascii=False, indent=4,
                 default=lambda x: x.tolist() if isinstance(x, np.ndarray) else x.item() if isinstance(x, np.generic) else TypeError) 
-        print('✅ CPA analysis completed successfully!')
+        print('\tINFO: CPA analysis completed successfully!')
         return self.result
 
 
@@ -202,13 +232,13 @@ class Draw:
         
     def get_top_key(self,result,abs=False):
         left_cor  = 0
-        right_cor = len(result[0][:])-1
+        right_cor =-1
         if self.compare_window[0]  and self.compare_window[1] :
             left_cor,right_cor = self.compare_window[0],self.compare_window[1]
         print(f">> Compare range (max correlation) = ({left_cor},{right_cor})")
         max_cor = {}
         for key in range(self.key_number):
-            max_cor[key] = np.max(np.abs(result[key][left_cor:right_cor])) if abs else np.max(result[key][left_cor:right_cor])
+            max_cor[key] = np.max(np.abs(result[key][0][left_cor:right_cor])) if abs else np.max(result[key][0][left_cor:right_cor])
         sorted_items = sorted(max_cor.items(), key=lambda x: x[1], reverse=True)
         # 获取前 n 个键
         top_keys = [item[0] for item in sorted_items[:self.top_key_num]]
@@ -306,7 +336,7 @@ class Draw:
         else:
             plt.show()
 
-    def draw_fig1(self,result,keys_to_plot_np,special_b=2773,key_min=0,key_max=3328,roi_start=None,roi_en=None):
+    def draw_fig1(self,result,keys_to_plot_np,time_tag,special_b=2773,key_min=0,key_max=3328,roi_start=None,roi_en=None):
         """
         绘制所有猜测密钥的相关系数随时间变化的图，并高亮显示特定密钥。
         """
@@ -330,9 +360,10 @@ class Draw:
             if(b_guess - key_min) % 200 == 0:
                 print(f">>> Plotting background curve: {b_guess}/{key_max}")
 
-            corrs, valid_indices = result[b_guess],[i for i in range(self.sample_number)]
+            corrs, valid_indices = result[b_guess][0],[i for i in range(self.sample_number)]
             if corrs is not None and len(valid_indices) > 0:
                 # Use grey slim transparent line to draw background
+                # print(f">>> {len(valid_indices)}")
                 plt.plot(valid_indices, corrs, color='lightgray', linewidth=0.5, alpha=0.7, zorder=1)
 
 
@@ -340,7 +371,7 @@ class Draw:
 
         colors = plt.cm.viridis(np.linspace(0, 1, len(highlight_list))) # 为5条曲线选择不同颜色
         for i, b_guess in enumerate(highlight_list):
-            corrs, valid_indices = result[b_guess],[i for i in range(self.sample_number)]
+            corrs, valid_indices = result[b_guess][0],[i for i in range(self.sample_number)]
             if corrs is not None:
                 # 特殊处理 b_guess = special_b 的样式
                 if b_guess == special_b:
@@ -381,13 +412,14 @@ class Draw:
 
         # 设置纵轴范围 (可根据需要调整)
         plt.ylim(-0.2, 0.2)  # 例如：设置纵轴范围为 -0.5 到 0.5
-
-        fig1_path = os.path.join(self.save_path, 'fig1_corrs_over_time.png')
+        time_path = os.path.join(self.save_path,time_tag+'/')
+        os.makedirs(time_path,exist_ok=True)
+        fig1_path = os.path.join(self.save_path,time_tag+'/', 'fig1_corrs_over_time.png')
         plt.savefig(fig1_path, dpi=300)
         print(f"[+] 图1已保存至: {fig1_path}")
         plt.close()
     
-    def draw_fig2(self,result,keys_to_plot_np,special_b=2773,key_min=0,key_max=3328,roi_start=None,roi_en=None):
+    def draw_fig2(self,result,keys_to_plot_np,time_tag,special_b=2773,key_min=0,key_max=3328,roi_start=None,roi_en=None):
         """
         绘制每个猜测密钥的最大相关系数图。
         """
@@ -396,7 +428,7 @@ class Draw:
 
         plt.figure(figsize=(15, 8))
         # 定义绘图的x轴范围和y轴数据
-        max_corrs = [np.max(result[key]) for key in range(self.key_number)]
+        max_corrs = [np.max(result[key][0]) for key in range(self.key_number)]
         b_range_to_plot = np.arange(key_min, key_max + 1)
         corrs_to_plot = max_corrs[key_min : key_max + 1]
         plt.plot(b_range_to_plot, corrs_to_plot, alpha=0.6, label='All b_guess correlation')
@@ -431,7 +463,9 @@ class Draw:
         plt.ylabel('Maximum absolute correlation coefficient')
         plt.legend([plt.Line2D([0], [0], color='w')], [f'Found key: b={keys_to_plot_np[0]}']) # 简化图例
         plt.grid(True)
-        fig2_path = os.path.join(self.save_path, 'fig2_cpa_result.png')
+        time_path = os.path.join(self.save_path,time_tag+'/')
+        os.makedirs(time_path,exist_ok=True)
+        fig2_path = os.path.join(self.save_path,time_tag+'/', 'fig2_cpa_result.png')
         plt.savefig(fig2_path, dpi=300)
         print(f"[+] 图2已保存至: {fig2_path}")
         plt.close()

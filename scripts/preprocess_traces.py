@@ -9,11 +9,10 @@ import math
 #      Parameters      #
 ########################
 
-# 包含源功耗曲线文件的目录
-SOURCE_DIR = 'traces_666-lnax10'
+
 # SOURCE_DIR = 'traces_666'
 # 功耗曲线文件的命名格式 (用{}表示变化的数字)
-FILE_PATTERN = 'ntt_pipeline_traces-loop{}.txt'
+FILE_PATTERN = 'mau_traces-loop{}.txt'
 
 # --- 文件范围设置 ---
 # 起始文件编号 (例如：loop5.txt 对应 START_FILE_NUM = 5)
@@ -24,7 +23,7 @@ END_FILE_NUM = 19
 NUM_FILES = END_FILE_NUM - START_FILE_NUM + 1
 
 # 每个文件中的迹线条数
-NUM_TRACES_PER_FILE = 3329
+NUM_TRACES_PER_FILE = 2994
 # 处理后输出的新文件名
 OUTPUT_FILENAME = f'averaged-{START_FILE_NUM}to{END_FILE_NUM}.txt'
 
@@ -32,7 +31,10 @@ OUTPUT_FILENAME = f'averaged-{START_FILE_NUM}to{END_FILE_NUM}.txt'
 # 是否生成可视化对比图
 GENERATE_VISUALIZATIONS = True
 # 要进行可视化对比的'a'值 (选择一个有代表性的即可)
-A_VAL_TO_VISUALIZE = 666
+A_VAL_TO_VISUALIZE = 2773
+
+# 包含源功耗曲线文件的目录
+SOURCE_DIR = f"/15T/Projects/Dilithium-SCA/data/traces/{A_VAL_TO_VISUALIZE}_kyber/power_traces/"
 
 
 ############################
@@ -234,8 +236,7 @@ if __name__ == "__main__":
         print("--- 开始功耗迹线预处理 ---")
         
         timestamp = datetime.now().strftime("%Y%m%d_%H.%M")
-        parts = SOURCE_DIR.split('_')
-        result_dir = os.path.join("result_preprocess", parts[-1])
+        result_dir = f"/15T/Projects/Dilithium-SCA/data/traces/{A_VAL_TO_VISUALIZE}/averaged/old_cym_scripts-3329/"
         os.makedirs(result_dir, exist_ok=True)
         print(f"本次运行结果将保存在: {result_dir}")
 
@@ -262,6 +263,8 @@ if __name__ == "__main__":
             traces_for_current_a = np.zeros((NUM_FILES, num_samples))
             for file_idx in range(NUM_FILES):
                 traces_for_current_a[file_idx, :] = all_data[file_idx][a_val]
+                # print(all_data[file_idx][a_val])
+                # raise ValueError("Pause")
             
             aligned_batch = align_traces(traces_for_current_a)
             averaged_trace = np.mean(aligned_batch, axis=0)
