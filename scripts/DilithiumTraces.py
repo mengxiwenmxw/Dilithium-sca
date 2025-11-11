@@ -6,20 +6,24 @@ from TraceProcess import TraceProcess ,MkDir
 
 """
 
-DATA_ROOT = "/15T/Projects/Dilithium-SCA/data/traces/"
-SOURCE_FILE_PREFIX_NAME = 'mau_traces-loop'
+KEY_NUM = 1037
+DIR_TAG = '_test2_x10'
 
-KEY_NUM = 2773
-FILE_NUM = 2
+FILE_NUM = 20
 # DIR_TAG = '_kyber_dont_touch'
-DIR_TAG = '_kyber_mm_loop7'
+
 
 SAMPLE_NUM = 5000
 PLAINTEXT_NUM = 2994
 
 PROCESS_MODE = 'align' # process mode: none (None) , align ('align'), denoise ('denoise'), align-denoise ('align-denoise')
 DOWN = False # bool 
-DOWN_NUM = 20 
+DOWN_NUM = 1
+
+
+DATA_ROOT = "/15T/Projects/Dilithium-SCA/data/traces/"
+SOURCE_FILE_PREFIX_NAME = 'mau_traces-loop'
+
 SAVE_ROOT = DATA_ROOT +f'{KEY_NUM}{DIR_TAG}/averaged/'
 SAVE_FILE_NAME = "averaged_mau_loop"
 
@@ -48,7 +52,7 @@ if __name__ == "__main__":
     ### two modes:
     ## mkdir ; process
     ###
-    #mode = 'mkdir'
+    # mode = 'mkdir'
     mode = 'process'
     if mode == 'mkdir':
         dir_set.mk_dir()

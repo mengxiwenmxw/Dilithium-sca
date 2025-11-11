@@ -134,7 +134,7 @@ def visualize_preprocessing(unaligned, aligned, averaged, a_val, result_dir):
     plt.close(fig3)
 
 GENERATE_VISUALIZATIONS = True
-A_VAL_TO_VISUALIZE = 2773
+A_VAL_TO_VISUALIZE = 1037
 
 class TraceProcess:
     def __init__(self, sample_number=5000, plaintext_number=3329,
@@ -241,8 +241,8 @@ class TraceProcess:
         freqs = np.fft.fftfreq(num_samples)
 
         for i in range(num_traces):
-            if i % 500 == 0:
-                print(f"正在对齐迹线: {i}/{num_traces-1}...")
+            # if i % 500 == 0:
+            #     print(f"正在对齐迹线: {i}/{num_traces-1}...")
                 
             current_trace = traces_matrix[i]
             

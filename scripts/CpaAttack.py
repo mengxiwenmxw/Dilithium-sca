@@ -86,7 +86,7 @@ def distance(plaintexts,key):
 
     a_last = plaintexts[4]
     # return output + mm_result
-    return output + p0
+    return output + mm_result
 
     # ##### Verify #####
     # wn = 1729
@@ -118,8 +118,8 @@ def process_key(key, power_trace_mat, plaintext_list):
     for index, plaintexts in enumerate(plaintext_list):
         
         h = distance(plaintexts, key)
-        if (key == 2773) & ((index % 500 == 0) | (index % 500 == 1)):
-            print(f"--- [DEBUG] h = {h}; plaintext = {plaintexts}; key = {key}\n\t\toutput = {(plaintexts[0]*key)%qNUM}, {(plaintexts[1]*key)%qNUM}, {(plaintexts[2]*key)%qNUM}, {(plaintexts[3]*key)%qNUM}, {(plaintexts[4]*key)%qNUM}, {(plaintexts[5]*key)%qNUM}")
+        # if (key == 2773) & ((index % 500 == 0) | (index % 500 == 1)):
+        #     print(f"--- [DEBUG] h = {h}; plaintext = {plaintexts}; key = {key}\n\t\toutput = {(plaintexts[0]*key)%qNUM}, {(plaintexts[1]*key)%qNUM}, {(plaintexts[2]*key)%qNUM}, {(plaintexts[3]*key)%qNUM}, {(plaintexts[4]*key)%qNUM}, {(plaintexts[5]*key)%qNUM}")
         H_distance_mat[index, :] = h
 
     return key, column_pearson_corr(power_trace_mat, H_distance_mat)
@@ -192,9 +192,9 @@ class CPA:
                         current_plaintexts = get_plaintexts(self.random_plaintext_file,plaintext_number)
                         ## change end
                         self.plaintext_list.append(current_plaintexts)
-                        if number % 500 == 0:
-                            print(f"\n--- [DEBUG] 轨迹计数: {number} (文件中的 plaintext_number: {plaintext_number}) ---")
-                            print(f"--- [DEBUG] Plaintexts: {current_plaintexts}\n")
+                        # if number % 500 == 0:
+                        #     print(f"\n--- [DEBUG] 轨迹计数: {number} (文件中的 plaintext_number: {plaintext_number}) ---")
+                        #     print(f"--- [DEBUG] Plaintexts: {current_plaintexts}\n")
                         number += 1
                         read_bar.update(1)
                     
@@ -431,7 +431,7 @@ class Draw:
         plt.axhline(0, color='black', linewidth=0.5)
 
         # 设置纵轴范围 (可根据需要调整)
-        plt.ylim(-0.3, 0.3)  # 例如：设置纵轴范围为 -0.5 到 0.5
+        plt.ylim(-0.2, 0.2)  # 例如：设置纵轴范围为 -0.5 到 0.5
         time_path = os.path.join(self.save_path,time_tag+'/')
         os.makedirs(time_path,exist_ok=True)
         fig1_path = os.path.join(self.save_path,time_tag+'/', 'fig1_corrs_over_time.png')
