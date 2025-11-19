@@ -1,0 +1,33 @@
+{
+    "General" : {
+        "KEY_TRUE":1037,
+        "FILE_NUM":5,
+        "SAMPLE_NUM":5000,
+        "PLAINTEXT_NUM":2994,
+        "TRACE_PROCESS_MODE":"align",
+        "DIR_TAG":"_hide_mm_merge_dummy_loop5",
+        "REMARK":"-output-mm"
+    },
+    "PATH" : {
+        "DATA_ROOT":"/15T/Projects/Dilithium-SCA/data/traces/",
+        "SPECIAL_ROOT":"/15T/Projects/Dilithium-SCA/data/special_files/",
+        "RESULT_ROOT":"/15T/Projects/Dilithium-SCA/result/"
+    },
+    "CPA" : {
+        "KEY_NUM":3329,
+        "LOW_SAMPLE":0,
+        "HIGH_SAMPLE":5000,
+        "DOWNSAMPLE_FACTOR":20,
+        "PROCESS_NUM":32,
+        "RANDOM_FILE_NAME": "random_3000_0-3328.txt"
+    },
+    "PROCESS" : {
+        "SOURCE_FILE_PREFIX_NAME":"mau_traces-loop",
+        "AVERAGED_FILE_PREFIX_NAME":"averaged_mau_loop",
+        "ALIGN_WINDOW_LEFT":500,
+        "ALIGN_WINDOW_RIGHT":750,
+        "ALIGN_MAX_SHIFT":7,
+        "DOWN_IN_PROCESS":"False",
+        "DOWN_FACTOR":1
+    }
+}

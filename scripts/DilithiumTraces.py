@@ -1,39 +1,54 @@
 from re import T
 from TraceProcess import TraceProcess ,MkDir
+import argparse
+import json
 
 """
     This scripts is used to process power traces of Dilithium poly module.
 
 """
 
-KEY_NUM = 1037
-DIR_TAG = 'without_mm_loop5'
+# import json file
+try:
+    with open("setting.json") as setf:
+        config = json.load(setf)
+except:
+    raise ValueError("Cant find setting.json file")
 
-FILE_NUM = 5
-# DIR_TAG = '_kyber_dont_touch'
+general = config.get("General",{})
+path = config.get("PATH",{})
+config_cpa = config.get("CPA",{})
+config_process = config.get("PROCESS",{})
+# import end
+
+KEY_TRUE = general.get("KEY_TRUE")
+DIR_TAG = general.get("DIR_TAG")
+
+FILE_NUM = general.get("FILE_NUM")
 
 
-SAMPLE_NUM = 5000
-PLAINTEXT_NUM = 2994
 
-PROCESS_MODE = 'align' # process mode: none (None) , align ('align'), denoise ('denoise'), align-denoise ('align-denoise')
-DOWN = False # bool 
-DOWN_NUM = 1
+SAMPLE_NUM = general.get("SAMPLE_NUM")
+PLAINTEXT_NUM = general.get("PLAINTEXT_NUM")
+
+PROCESS_MODE = general.get("TRACE_PROCESS_MODE") # process mode: none (None) , align ('align'), denoise ('denoise'), align-denoise ('align-denoise')
+DOWN = True if config_process.get("DOWN_IN_PROCESS") == "True" else False # bool 
+DOWN_NUM = config_process.get("DOWN_FACTOR")
 
 
-DATA_ROOT = "/15T/Projects/Dilithium-SCA/data/traces/"
-SOURCE_FILE_PREFIX_NAME = 'mau_traces-loop'
+DATA_ROOT = path.get("DATA_ROOT")
+SOURCE_FILE_PREFIX_NAME = config_process.get("SOURCE_FILE_PREFIX_NAME")
 
-SAVE_ROOT = DATA_ROOT +f'{KEY_NUM}{DIR_TAG}/averaged/'
-SAVE_FILE_NAME = "averaged_mau_loop"
+SAVE_ROOT = DATA_ROOT +f'{KEY_TRUE}{DIR_TAG}/averaged/'
+SAVE_FILE_NAME = config_process.get("AVERAGED_FILE_PREFIX_NAME")
 
-ALIGN_WINDOW = (500,750)
-ALIGN_MAX_SHIFT = 7
+ALIGN_WINDOW = (config_process.get("ALIGN_WINDOW_LEFT"),config_process.get("ALIGN_WINDOW_RIGHT"))
+ALIGN_MAX_SHIFT = config_process.get("ALIGN_MAX_SHIFT")
 
 
 dir_set = MkDir(
     data_root=DATA_ROOT,
-    key_number=KEY_NUM,
+    key_number=KEY_TRUE,
     power_file_number=FILE_NUM,
     file_name=SOURCE_FILE_PREFIX_NAME,
     tag=DIR_TAG
@@ -52,11 +67,17 @@ if __name__ == "__main__":
     ### two modes:
     ## mkdir ; process
     ###
-    #mode = 'mkdir'
-    mode = 'process'
-    if mode == 'mkdir':
+    parser = argparse.ArgumentParser(
+        description='select mode',
+        epilog='python script.py -d : 创建数据目录'
+    )
+    
+    parser.add_argument('-d', '--mkdir', action='store_true',
+                        help='创建功耗迹存储目录')
+    args = parser.parse_args()
+    if args.mkdir:
         dir_set.mk_dir()
-    elif mode == 'process':
+    else:
         power_files = dir_set.get_power_traces_files()
         traces_process.process_traces(
             power_trace_files=power_files,
